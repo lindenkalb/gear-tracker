@@ -1,4 +1,5 @@
 using GearTracker.Api;
+using GearTracker.Api.Models;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -10,7 +11,15 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
+builder.Services.AddScoped<GearTracker.Api.Services.WearService>();
+
 var app = builder.Build();
+
+app.MapGet("/gear/{id}/wear", async (int id, GearTracker.Api.Services.WearService wear) =>
+    Results.Ok(await wear.GetGearMetersAsync(id) / 1609.344));
+
+app.MapGet("/components/{id}/wear", async (int id, GearTracker.Api.Services.WearService wear) =>
+    Results.Ok(await wear.GetComponentMetersAsync(id) / 1609.344));
 
 app.MapGet("/health/db", async (AppDbContext db) =>
     await db.Database.CanConnectAsync()
