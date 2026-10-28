@@ -13,6 +13,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<Workout>()
+            .HasIndex(w => new { w.Source, w.SourceKey })
+            .IsUnique();
+
         modelBuilder.Entity<ComponentInstall>()
             .HasIndex(ci => ci.ComponentId)
             .IsUnique()
