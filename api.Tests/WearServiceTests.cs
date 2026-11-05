@@ -1,6 +1,8 @@
 using GearTracker.Api.Models;
 using GearTracker.Api.Services;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace GearTracker.Api.Tests;
 
@@ -105,11 +107,11 @@ public class WearServiceTests
 
         var shoes1 = new Gear { Name = "Running Shoes", Kind = GearKind.Shoes };
         var shoes2 = new Gear { Name = "Unused Shoes", Kind = GearKind.Shoes };
-        var Workout1 = NewWorkout(ActivityType.Run, shoes1, Utc(10, 10, hour: 10), 10);
-        var Workout2 = NewWorkout(ActivityType.Run, shoes2, Utc(10, 10, hour: 10), 2);
+        var workout1 = NewWorkout(ActivityType.Run, shoes1, Utc(10, 10, hour: 10), 10);
+        var workout2 = NewWorkout(ActivityType.Run, shoes2, Utc(10, 10, hour: 10), 2);
 
-        db.Workouts.Add(Workout1);
-        db.Workouts.Add(Workout2);
+        db.Workouts.Add(workout1);
+        db.Workouts.Add(workout2);
         db.Gear.Add(shoes1);
         db.Gear.Add(shoes2);
         await db.SaveChangesAsync();
@@ -136,33 +138,54 @@ public class WearServiceTests
 
         var bike1 = new Gear { Name = "Old Bike", Kind = GearKind.Bike };
         var bike2 = new Gear { Name = "New Bike", Kind = GearKind.Bike };
-        var Tire = new Component { Name = "Front Bike Tire", Kind = ComponentKind.FrontTire };
+        var tire = new Component { Name = "Front Bike Tire", Kind = ComponentKind.FrontTire };
 
         // Two install windows for the same tire, one per bike.
         db.ComponentInstalls.AddRange(
-            new ComponentInstall { Component = Tire, Gear = bike1, InstalledAt = Utc(10, 10, hour: 10), RemovedAt = Utc(12, 10, hour: 10) },
-            new ComponentInstall { Component = Tire, Gear = bike2, InstalledAt = Utc( 12, 10, hour: 10) });
+            new ComponentInstall { Component = tire, Gear = bike1, InstalledAt = Utc(10, 10, hour: 10), RemovedAt = Utc(12, 10, hour: 10) },
+            new ComponentInstall { Component = tire, Gear = bike2, InstalledAt = Utc( 12, 10, hour: 10) });
 
         await db.SaveChangesAsync();
 
-        var TireDistance1 = await wear.GetComponentMetersAsync(Tire.Id);
+        var tireDistance1 = await wear.GetComponentMetersAsync(tire.Id);
 
         db.Workouts.Add(NewWorkout(ActivityType.MountainRide, bike1, Utc(10, 11, hour: 10), 10));
 
         await db.SaveChangesAsync();
 
-        var TireDistance2 = await wear.GetComponentMetersAsync(Tire.Id);
+        var tireDistance2 = await wear.GetComponentMetersAsync(tire.Id);
 
         // Adding Workouts to the old and new bikes after the uninstall and reinstall
         db.Workouts.Add(NewWorkout(ActivityType.MountainRide, bike1, Utc(12, 11, hour: 10), 11));
-        db.Workouts.Add(NewWorkout( ActivityType.MountainRide, bike2, Utc(12, 11, hour: 10), 10));
+        db.Workouts.Add(NewWorkout(ActivityType.MountainRide, bike2, Utc(12, 11, hour: 10), 10));
 
         await db.SaveChangesAsync();
 
-        var TireDistance3 = await wear.GetComponentMetersAsync(Tire.Id);
+        var tireDistance3 = await wear.GetComponentMetersAsync(tire.Id);
 
-        Assert.Equal(0, TireDistance1);
-        Assert.Equal(10000, TireDistance2);
-        Assert.Equal(20000, TireDistance3);
+        Assert.Equal(0, tireDistance1);
+        Assert.Equal(10000, tireDistance2);
+        Assert.Equal(20000, tireDistance3);
+    }
+
+    [Fact]
+    public async Task Part_never_installed_has_no_miles()
+    {
+        await using var db = await TestDb.CreateAsync();
+        var wear = new WearService(db);
+
+        var tire = new Component { Name = "Unused Front Tire", Kind = ComponentKind.FrontTire };
+        var bike = new Gear { Name = "Bike", Kind = GearKind.Bike };
+        var workout = NewWorkout( ActivityType.MountainRide, bike, Utc(10, 10, hour: 10), 10);
+
+        db.Workouts.Add(workout);
+        db.Components.Add(tire);
+        db.Gear.Add(bike);
+
+        await db.SaveChangesAsync();
+
+        var tireDistance = await wear.GetComponentMetersAsync(tire.Id);
+
+        Assert.Equal(0, tireDistance);
     }
 }
