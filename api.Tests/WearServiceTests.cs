@@ -1,5 +1,6 @@
 using GearTracker.Api.Models;
 using GearTracker.Api.Services;
+using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 
 namespace GearTracker.Api.Tests;
 
@@ -65,5 +66,66 @@ public class WearServiceTests
 
         Assert.Equal(20000, oldMeters);
         Assert.Equal(25000, newMeters);
+    }
+
+    [Fact]
+    public async Task Shoe_miles_come_only_from_that_pair()
+    {
+        await using var db = await TestDb.CreateAsync();
+        var wear = new WearService(db);
+
+        var shoes1 = new Gear { Name = "Running Shoes", Kind = GearKind.Shoes };
+        var shoes2 = new Gear { Name = "Unused Shoes", Kind = GearKind.Shoes };
+        var Workout1 = NewWorkout(ActivityType.Run, shoes1, Utc(10, 10, hour: 10), 10);
+        var Workout2 = NewWorkout(ActivityType.Run, shoes2, Utc(10, 10, hour: 10), 2);
+
+        db.Workouts.Add(Workout1);
+        db.Workouts.Add(Workout2);
+        db.Gear.Add(shoes1);
+        db.Gear.Add(shoes2);
+        await db.SaveChangesAsync();
+
+        var shoes1Distance = await wear.GetGearMetersAsync(shoes1.Id);
+        var shoes2Distance = await wear.GetGearMetersAsync(shoes2.Id);
+
+        Assert.Equal(10000, shoes1Distance);
+        Assert.Equal(2000, shoes2Distance);
+    }
+
+    [Fact]
+    public async Task Tire_moved_between_bikes_keeps_its_miles()
+    {
+        await using var db = await TestDb.CreateAsync();
+        var wear = new WearService(db);
+
+        var bike1 = new Gear { Name = "Old Bike", Kind = GearKind.Bike };
+        var bike2 = new Gear { Name = "New Bike", Kind = GearKind.Bike };
+        var Tire = new Component { Name = "Front Bike Tire", Kind = ComponentKind.FrontTire };
+        
+        db.ComponentInstalls.AddRange(
+            new ComponentInstall { Component = Tire, Gear = bike1, InstalledAt = Utc(10, 10, hour: 10), RemovedAt = Utc(12, 10, hour: 10) },
+            new ComponentInstall { Component = Tire, Gear = bike2, InstalledAt = Utc( 12, 10, hour: 10) });
+
+        await db.SaveChangesAsync();
+
+        var TireDistance1 = await wear.GetComponentMetersAsync(Tire.Id);
+
+        db.Workouts.Add(NewWorkout(ActivityType.MountainRide, bike1, Utc(10, 11, hour: 10), 10));
+        
+        await db.SaveChangesAsync();
+
+        var TireDistance2 = await wear.GetComponentMetersAsync(Tire.Id);
+
+        // Adding Workouts to the old and new bikes after the uninstall and reinstall
+        db.Workouts.Add(NewWorkout(ActivityType.MountainRide, bike1, Utc(12, 11, hour: 10), 11));
+        db.Workouts.Add(NewWorkout( ActivityType.MountainRide, bike2, Utc(12, 11, hour: 10), 10));
+
+        await db.SaveChangesAsync();
+
+        var TireDistance3 = await wear.GetComponentMetersAsync(Tire.Id);
+
+        Assert.Equal(0, TireDistance1);
+        Assert.Equal(10000, TireDistance2);
+        Assert.Equal(20000, TireDistance3);
     }
 }
