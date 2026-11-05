@@ -37,4 +37,33 @@ public class WearServiceTests
 
         Assert.Equal(5000, meters);
     }
+
+    [Fact]
+    public async Task Ride_at_swap_time_counts_for_new_pads_only()
+    {
+        await using var db = await TestDb.CreateAsync();
+        var wear = new WearService(db);
+
+        // Arrange: one bike with old pads swapped for new ones on Oct 12 at 14:00
+        var bike = new Gear { Name = "Bike 1", Kind = GearKind.Bike };
+        var oldPads = new Component { Name = "Old brake pads", Kind = ComponentKind.FrontBrakePads };
+        var newPads = new Component { Name = "New brake pads", Kind = ComponentKind.FrontBrakePads };
+
+        db.ComponentInstalls.AddRange(
+            new ComponentInstall { Component = oldPads, Gear = bike, InstalledAt = Utc(6, 1), RemovedAt = Utc(10, 12, hour: 14) },
+            new ComponentInstall { Component = newPads, Gear = bike, InstalledAt = Utc(10, 12, hour: 14) });
+
+        db.Workouts.AddRange(
+            NewWorkout(ActivityType.MountainRide, bike, Utc(10, 12, hour: 9), 20),
+            NewWorkout(ActivityType.MountainRide, bike, Utc(10, 12, hour: 14), 10),
+            NewWorkout(ActivityType.MountainRide, bike, Utc(10, 12, hour: 17), 15));
+        
+        await db.SaveChangesAsync();
+
+        double oldMeters = await wear.GetComponentMetersAsync(oldPads.Id);
+        double newMeters = await wear.GetComponentMetersAsync(newPads.Id);
+
+        Assert.Equal(20000, oldMeters);
+        Assert.Equal(25000, newMeters);
+    }
 }
