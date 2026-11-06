@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using GearTracker.Api.Models;
 using GearTracker.Api.Services;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -187,5 +188,33 @@ public class WearServiceTests
         var tireDistance = await wear.GetComponentMetersAsync(tire.Id);
 
         Assert.Equal(0, tireDistance);
+    }
+
+    [Fact]
+    public async Task Ride_one_second_before_removal_counts_for_old_part()
+    {
+        await using var db = await TestDb.CreateAsync();
+        var wear = new WearService(db);
+        var removal1 = Utc(10, 10, hour: 10).AddSeconds(-1);
+        var removal2 = Utc(10, 10, hour: 10);
+
+        var oldTire = new Component { Name = "Old Tire", Kind = ComponentKind.FrontTire };
+        var newTire = new Component { Name = "New Tire", Kind = ComponentKind.FrontTire };
+        var bike = new Gear { Name = "Mountain Bike", Kind = GearKind.Bike };
+        var ride = NewWorkout(ActivityType.MountainRide, bike, removal1, 10);
+        
+        db.ComponentInstalls.AddRange(
+            new ComponentInstall { Component = oldTire, Gear = bike, InstalledAt = Utc(10, 9, hour: 10), RemovedAt = removal2 },
+            new ComponentInstall { Component = newTire, Gear = bike, InstalledAt = removal2 });
+
+        db.Add(ride);
+
+        await db.SaveChangesAsync();
+
+        var oldTireDistance = await wear.GetComponentMetersAsync(oldTire.Id);
+        var newTireDistance = await wear.GetComponentMetersAsync(newTire.Id);
+
+        Assert.Equal(10000, oldTireDistance);
+        Assert.Equal(0, newTireDistance);
     }
 }
