@@ -219,7 +219,7 @@ public class WearServiceTests
     }
 
     [Fact]
-    public async Task Ride_one_second_after_removal_counts_for_new_part()
+    public async Task Ride_one_second_after_install_counts_for_new_part()
     {
         await using var db = await TestDb.CreateAsync();
         var wear = new WearService(db);
