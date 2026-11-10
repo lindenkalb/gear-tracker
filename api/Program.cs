@@ -5,6 +5,8 @@
 using GearTracker.Api;
 using GearTracker.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json.Serialization;
+using GearTracker.Api.Endpoints;
 
 // Creates the builder, which loads settings from appsettings.json, user secrets
 // (on your Mac), and environment variables (on Azure later).
@@ -24,8 +26,13 @@ builder.Services.AddOpenApi();
 // "Scoped" means a new WearService for each request, the same as AppDbContext.
 builder.Services.AddScoped<GearTracker.Api.Services.WearService>();
 
+builder.Services.ConfigureHttpJsonOptions(o =>
+    o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
 // Build the app. Setup is finished after this line; everything below says what it does.
 var app = builder.Build();
+
+app.MapGearEndpoints();
 
 // GET /gear/{id}/wear: total miles on one piece of gear.
 // ASP.NET fills each lambda parameter for you: "int id" matches {id} in the address
