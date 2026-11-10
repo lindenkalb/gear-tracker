@@ -1,6 +1,200 @@
-@GearTracker.Api_HostAddress = http://localhost:5133
+# Gear Tracker API requests, for the REST Client extension in VS Code.
+#
+# 1. Start the API in a terminal:   dotnet run --project api
+# 2. Click "Send Request" above each request, in order, top to bottom.
+#
+# Requests with "# @name" save their response, so later requests can reuse the
+# new IDs (for example {{addBike.response.body.$.id}}). That's why the order matters.
+# Each request's comment says what you should get back.
 
-GET {{GearTracker.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+@baseUrl = http://localhost:5133
 
-###
+### Health check. Expect 200 "database connected".
+GET {{baseUrl}}/health/db
+
+
+### ===== GEAR =====
+
+### Add a bike. Expect 201 Created, with the new bike's id.
+# @name addBike
+POST {{baseUrl}}/gear
+Content-Type: application/json
+
+{
+  "name": "Stumpjumper",
+  "kind": "Bike",
+  "defaultFor": "MountainRide"
+}
+
+### Add road shoes, to be replaced at 400 miles (643,738 meters). Expect 201.
+# @name addShoes
+POST {{baseUrl}}/gear
+Content-Type: application/json
+
+{
+  "name": "Road shoes",
+  "kind": "Shoes",
+  "defaultFor": "Run",
+  "replaceAtMeters": 643738
+}
+
+### List all gear. Expect 200 with both, sorted by name.
+GET {{baseUrl}}/gear
+
+### Get just the bike. Expect 200.
+GET {{baseUrl}}/gear/{{addBike.response.body.$.id}}
+
+### Edit the shoes' name. Expect 200 with the new name.
+PUT {{baseUrl}}/gear/{{addShoes.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "name": "Pegasus 41 (blue)",
+  "kind": "Shoes",
+  "defaultFor": "Run",
+  "replaceAtMeters": 643738
+}
+
+### FAIL CASE: gear with no name. Expect 400 "Name is required."
+POST {{baseUrl}}/gear
+Content-Type: application/json
+
+{
+  "name": "",
+  "kind": "Shoes"
+}
+
+### FAIL CASE: a negative replace-at distance. Expect 400.
+POST {{baseUrl}}/gear
+Content-Type: application/json
+
+{
+  "name": "Bad shoes",
+  "kind": "Shoes",
+  "replaceAtMeters": -5
+}
+
+### FAIL CASE: gear that doesn't exist. Expect 404.
+GET {{baseUrl}}/gear/99999
+
+
+### ===== PARTS =====
+
+### Add front brake pads. Expect 201, with the new part's id.
+# @name addPads
+POST {{baseUrl}}/components
+Content-Type: application/json
+
+{
+  "name": "Front pads #1",
+  "kind": "FrontBrakePads"
+}
+
+### List all parts. Expect 200.
+GET {{baseUrl}}/components
+
+### Install the pads on the bike, Oct 1 at 9:00 a.m. Mountain time. Expect 200.
+POST {{baseUrl}}/components/{{addPads.response.body.$.id}}/install
+Content-Type: application/json
+
+{
+  "gearId": {{addBike.response.body.$.id}},
+  "installedAt": "2026-10-01T09:00:00-06:00"
+}
+
+### FAIL CASE: install the same pads again. Expect 409 "Remove it from its current gear first."
+POST {{baseUrl}}/components/{{addPads.response.body.$.id}}/install
+Content-Type: application/json
+
+{
+  "gearId": {{addBike.response.body.$.id}}
+}
+
+### Remove the pads, Oct 20 at 10:00 a.m. Expect 200 with RemovedAt set.
+POST {{baseUrl}}/components/{{addPads.response.body.$.id}}/remove
+Content-Type: application/json
+
+{
+  "removedAt": "2026-10-20T10:00:00-06:00"
+}
+
+### FAIL CASE: remove them again. Expect 409 "That part isn't installed on anything."
+POST {{baseUrl}}/components/{{addPads.response.body.$.id}}/remove
+
+### FAIL CASE: reinstall at a time inside the first window (Oct 15). Expect 400 (overlap).
+POST {{baseUrl}}/components/{{addPads.response.body.$.id}}/install
+Content-Type: application/json
+
+{
+  "gearId": {{addBike.response.body.$.id}},
+  "installedAt": "2026-10-15T09:00:00-06:00"
+}
+
+### Reinstall the pads, Oct 25. Expect 200.
+POST {{baseUrl}}/components/{{addPads.response.body.$.id}}/install
+Content-Type: application/json
+
+{
+  "gearId": {{addBike.response.body.$.id}},
+  "installedAt": "2026-10-25T09:00:00-06:00"
+}
+
+### FAIL CASE: remove at a time before they went back on (Oct 24). Expect 400.
+POST {{baseUrl}}/components/{{addPads.response.body.$.id}}/remove
+Content-Type: application/json
+
+{
+  "removedAt": "2026-10-24T09:00:00-06:00"
+}
+
+### The pads' install history. Expect 2 windows, oldest first, times in UTC
+### (9:00 a.m. Mountain time shows as 15:00).
+GET {{baseUrl}}/components/{{addPads.response.body.$.id}}/installs
+
+
+### ===== WEAR =====
+### No workouts are saved yet, so both should be 0.
+
+### Miles on the bike. Expect 0.
+GET {{baseUrl}}/gear/{{addBike.response.body.$.id}}/wear
+
+### Miles on the pads. Expect 0.
+GET {{baseUrl}}/components/{{addPads.response.body.$.id}}/wear
+
+
+### ===== RETIRING =====
+
+### Retire the pads. Expect 200 with retiredOn set. This also closes their open install.
+POST {{baseUrl}}/components/{{addPads.response.body.$.id}}/retire
+
+### Check the history: the second window should now have a removedAt too.
+GET {{baseUrl}}/components/{{addPads.response.body.$.id}}/installs
+
+### FAIL CASE: install retired pads. Expect 400 "That part is retired."
+POST {{baseUrl}}/components/{{addPads.response.body.$.id}}/install
+Content-Type: application/json
+
+{
+  "gearId": {{addBike.response.body.$.id}}
+}
+
+### Retire the shoes. Expect 200 with retiredOn set.
+POST {{baseUrl}}/gear/{{addShoes.response.body.$.id}}/retire
+
+### Add an insole, for the next test. Expect 201.
+# @name addInsole
+POST {{baseUrl}}/components
+Content-Type: application/json
+
+{
+  "name": "Superfeet insoles",
+  "kind": "Insole"
+}
+
+### FAIL CASE: install the insole in the retired shoes. Expect 400 "That gear is retired."
+POST {{baseUrl}}/components/{{addInsole.response.body.$.id}}/install
+Content-Type: application/json
+
+{
+  "gearId": {{addShoes.response.body.$.id}}
+}
