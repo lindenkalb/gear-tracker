@@ -33,6 +33,7 @@ builder.Services.ConfigureHttpJsonOptions(o =>
 var app = builder.Build();
 
 app.MapGearEndpoints();
+app.MapComponentEndpoints();
 
 // GET /gear/{id}/wear: total miles on one piece of gear.
 // ASP.NET fills each lambda parameter for you: "int id" matches {id} in the address
