@@ -1,6 +1,20 @@
 namespace GearTracker.Api.Models;
 
 /// <summary>
+/// Where a workout came from. Together with SourceKey, it identifies a workout,
+/// so the same one is never imported twice.
+/// </summary>
+public enum WorkoutSource
+{
+    // Imported from the Health app's "Export All Health Data" zip file.
+    HealthExport,
+    // Synced from the iPhone app through HealthKit.
+    HealthKit,
+    // Logged by hand on the website's Workouts page.
+    Manual
+}
+
+/// <summary>
 /// The kind of activity a workout was. Stored in the database as text, like "Run",
 /// because of the enum rule in AppDbContext.ConfigureConventions.
 /// </summary>
@@ -15,18 +29,6 @@ public enum ActivityType
     Soccer,
     Baseball,
     Climbing
-}
-
-/// <summary>
-/// Where a workout came from. Together with SourceKey, it identifies a workout,
-/// so the same one is never imported twice.
-/// </summary>
-public enum WorkoutSource
-{
-    // Imported from the Health app's "Export All Health Data" zip file.
-    HealthExport,
-    // Synced from the iPhone app through HealthKit (Phase 5).
-    HealthKit
 }
 
 /// <summary>
